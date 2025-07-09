@@ -1,0 +1,229 @@
+{
+  "name": "Weekly Report",
+  "nodes": [
+    {
+      "parameters": {
+        "resource": "table",
+        "operation": "getRows",
+        "workbook": {
+          "__rl": true,
+          "value": "YOUR_WORKBOOK_ID",
+          "mode": "list",
+          "cachedResultName": "_Tracker",
+          "cachedResultUrl": "YOUR_SHAREPOINT_URL"
+        },
+        "worksheet": {
+          "__rl": true,
+          "value": "YOUR_WORKSHEET_ID",
+          "mode": "list",
+          "cachedResultName": "2025",
+          "cachedResultUrl": "YOUR_SHAREPOINT_URL"
+        },
+        "table": {
+          "__rl": true,
+          "value": "YOUR_TABLE_ID",
+          "mode": "list",
+          "cachedResultName": "Table1",
+          "cachedResultUrl": "YOUR_SHAREPOINT_URL"
+        },
+        "filters": {}
+      },
+      "type": "n8n-nodes-base.microsoftExcel",
+      "typeVersion": 2.1,
+      "position": [
+        220,
+        0
+      ],
+      "id": "e2491bf5-256b-4b05-a871-b76871afdab1",
+      "name": "Get rows",
+      "credentials": {
+        "microsoftExcelOAuth2Api": {
+          "id": "YOUR_EXCEL_CREDENTIAL_ID",
+          "name": "Microsoft Excel account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "your.email@example.com",
+        "subject": "Weekly Report",
+        "message": "=Hi there,<br><br>\nplease find attached the weekly report on your transactions. A copy has been uploaded to the Reports Sharepoint site.",
+        "options": {
+          "appendAttribution": true,
+          "attachmentsUi": {
+            "attachmentsBinary": [
+              {}
+            ]
+          },
+          "senderName": "n8n Automation Flow"
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        760,
+        100
+      ],
+      "id": "69c36289-1192-4d75-9284-b44713e1ca3c",
+      "name": "Send a message",
+      "webhookId": "YOUR_WEBHOOK_ID",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "YOUR_GMAIL_CREDENTIAL_ID",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "upload",
+        "site": {
+          "__rl": true,
+          "value": "YOUR_SITE_ID",
+          "mode": "id"
+        },
+        "folder": {
+          "__rl": true,
+          "value": "YOUR_FOLDER_ID",
+          "mode": "list",
+          "cachedResultName": "Reports"
+        },
+        "fileName": "={{ $('Report Creation').item.json.filename }}",
+        "fileContents": "data",
+        "requestOptions": {}
+      },
+      "type": "n8n-nodes-base.microsoftSharePoint",
+      "typeVersion": 1,
+      "position": [
+        760,
+        -100
+      ],
+      "id": "07725906-30e0-41be-99f2-92c3ef0cd66a",
+      "name": "Upload file",
+      "credentials": {
+        "microsoftSharePointOAuth2Api": {
+          "id": "YOUR_SHAREPOINT_CREDENTIAL_ID",
+          "name": "Microsoft SharePoint account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return [\n  {\n    binary: {\n      data: {\n        data: Buffer.from($json[\"html\"]).toString('base64'),\n        fileName: $json[\"filename\"] || \"report.html\",\n        mimeType: \"text/html\",\n      }\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        560,
+        0
+      ],
+      "id": "453d3a3e-72e1-4001-8a2c-02491d5f332f",
+      "name": "HTML File Generation"
+    },
+    {
+      "parameters": {
+        "jsCode": "/**\n * n8n Payment Report Generator - FIXED VERSION\n * Generates a complete, self-contained HTML payment report\n * \n * @param {Array} paymentData - Array of payment objects\n * @returns {String} Complete HTML string ready to save as .html file\n */\nfunction generatePaymentReport(paymentData) {\n  try {\n    // Validate input data\n    if (!paymentData || !Array.isArray(paymentData) || paymentData.length === 0) {\n      throw new Error('Invalid or empty payment data provided');\n    }\n\n    console.log('Input data structure:', JSON.stringify(paymentData[0], null, 2));\n\n    // Excel date conversion utility (Excel serial date to JS Date)\n    function excelDateToJSDate(excelDate) {\n      if (!excelDate || typeof excelDate !== 'number') {\n        return new Date();\n      }\n      // Excel epoch starts from January 1, 1900 (with leap year bug adjustment)\n      const excelEpoch = new Date(1900, 0, 1);\n      const msPerDay = 24 * 60 * 60 * 1000;\n      // Subtract 2 days to account for Excel's leap year bug and 0-based indexing\n      return new Date(excelEpoch.getTime() + (excelDate - 2) * msPerDay);\n    }\n\n    // Safe number parsing function\n    function safeParseNumber(value) {\n      if (value === null || value === undefined || value === '') {\n        return 0;\n      }\n      const parsed = parseFloat(value);\n      return isNaN(parsed) ? 0 : parsed;\n    }\n\n    // Safe string extraction function\n    function safeString(value, fallback = 'Unknown') {\n      if (value === null || value === undefined || value === '') {\n        return fallback;\n      }\n      return String(value);\n    }\n\n    // Format currency\n    function formatCurrency(amount, currency = 'EUR') {\n      const safeAmount = safeParseNumber(amount);\n      return new Intl.NumberFormat('en-US', {\n        style: 'currency',\n        currency: currency,\n        minimumFractionDigits: 2\n      }).format(safeAmount);\n    }\n\n    // Process payment data with safe extraction\n    const processedData = paymentData.map(payment => {\n      // Handle different possible data structures\n      const data = payment.json || payment;\n      \n      // Extract date - handle multiple possible formats\n      let parsedDate;\n      if (data.Date && typeof data.Date === 'number') {\n        parsedDate = excelDateToJSDate(data.Date);\n      } else if (data.Date) {\n        parsedDate = new Date(data.Date);\n      } else if (data.date) {\n        parsedDate = new Date(data.date);\n      } else {\n        parsedDate = new Date();\n      }\n\n      // If date is invalid, use current date\n      if (isNaN(parsedDate.getTime())) {\n        parsedDate = new Date();\n      }\n\n      return {\n        // Original data\n        ...data,\n        // Processed fields with safe extraction\n        Amount: safeParseNumber(data.Amount || data.amount),\n        Merchant: safeString(data.Merchant || data.merchant || data.description),\n        Currency: safeString(data.Currency || data.currency, 'EUR'),\n        Type: safeString(data.Type || data.type || data.category, 'Payment'),\n        Month: safeString(data.Month || parsedDate.toLocaleDateString('en-US', { month: 'long' })),\n        Year: safeParseNumber(data.Year || parsedDate.getFullYear()),\n        // Computed fields\n        parsedDate: parsedDate,\n        formattedDate: parsedDate.toLocaleDateString('en-US', {\n          year: 'numeric',\n          month: 'short',\n          day: 'numeric'\n        }),\n        formattedAmount: formatCurrency(safeParseNumber(data.Amount || data.amount), safeString(data.Currency || data.currency, 'EUR'))\n      };\n    });\n\n    console.log('Processed data sample:', JSON.stringify(processedData[0], null, 2));\n\n    // Calculate statistics with safe math\n    const validAmounts = processedData.map(p => p.Amount).filter(amount => !isNaN(amount) && amount > 0);\n    const totalAmount = validAmounts.reduce((sum, amount) => sum + amount, 0);\n    const averageAmount = validAmounts.length > 0 ? totalAmount / validAmounts.length : 0;\n\n    const stats = {\n      totalAmount: totalAmount,\n      transactionCount: processedData.length,\n      averageAmount: averageAmount,\n      dateRange: {\n        start: new Date(Math.min(...processedData.map(p => p.parsedDate.getTime()))),\n        end: new Date(Math.max(...processedData.map(p => p.parsedDate.getTime())))\n      },\n      topMerchant: {}\n    };\n\n    // Calculate top merchant safely\n    processedData.forEach(payment => {\n      if (payment.Merchant && payment.Amount > 0) {\n        stats.topMerchant[payment.Merchant] = (stats.topMerchant[payment.Merchant] || 0) + payment.Amount;\n      }\n    });\n\n    // Get top merchant name\n    const merchants = Object.keys(stats.topMerchant);\n    const topMerchantName = merchants.length > 0 \n      ? merchants.reduce((a, b) => stats.topMerchant[a] > stats.topMerchant[b] ? a : b)\n      : 'No transactions';\n\n    const topMerchantAmount = merchants.length > 0 ? stats.topMerchant[topMerchantName] : 0;\n\n    // Group by month for chart - safer approach\n    const monthlyData = {};\n    processedData.forEach(payment => {\n      if (payment.Amount > 0) {\n        const monthKey = `${payment.Month} ${payment.Year}`;\n        monthlyData[monthKey] = (monthlyData[monthKey] || 0) + payment.Amount;\n      }\n    });\n\n    // Ensure we have at least one data point for charts\n    if (Object.keys(monthlyData).length === 0) {\n      const currentMonth = new Date().toLocaleDateString('en-US', { month: 'long' });\n      const currentYear = new Date().getFullYear();\n      monthlyData[`${currentMonth} ${currentYear}`] = 0;\n    }\n\n    // Top merchants data\n    const topMerchants = Object.entries(stats.topMerchant)\n      .sort(([,a], [,b]) => b - a)\n      .slice(0, 5);\n\n    // Ensure we have at least one merchant for charts\n    if (topMerchants.length === 0) {\n      topMerchants.push(['No transactions', 0]);\n    }\n\n    console.log('Final stats:', stats);\n    console.log('Monthly data:', monthlyData);\n    console.log('Top merchants:', topMerchants);\n\n    // Generate HTML report\n    const html = `\n<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n    <meta charset=\"UTF-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n    <title>Payment Report - ${new Date().toLocaleDateString()}</title>\n    <link href=\"https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css\" rel=\"stylesheet\">\n    <script src=\"https://cdn.jsdelivr.net/npm/chart.js\"></script>\n    <style>\n        :root {\n            --primary-color: #2563eb;\n            --secondary-color: #10b981;\n            --accent-color: #f59e0b;\n            --text-color: #1f2937;\n            --bg-color: #f8fafc;\n            --card-bg: #ffffff;\n            --border-color: #e5e7eb;\n        }\n\n        body {\n            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;\n            background-color: var(--bg-color);\n            color: var(--text-color);\n            line-height: 1.6;\n        }\n\n        .header-section {\n            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));\n            color: white;\n            padding: 2rem 0;\n            margin-bottom: 2rem;\n        }\n\n        .stat-card {\n            background: var(--card-bg);\n            border-radius: 10px;\n            padding: 1.5rem;\n            margin-bottom: 1.5rem;\n            box-shadow: 0 2px 10px rgba(0,0,0,0.1);\n            border-left: 4px solid var(--primary-color);\n            transition: transform 0.2s ease;\n        }\n\n        .stat-card:hover {\n            transform: translateY(-2px);\n        }\n\n        .stat-number {\n            font-size: 2rem;\n            font-weight: bold;\n            color: var(--primary-color);\n            margin-bottom: 0.5rem;\n        }\n\n        .stat-label {\n            color: #6b7280;\n            font-size: 0.9rem;\n            text-transform: uppercase;\n            letter-spacing: 0.5px;\n        }\n\n        .chart-container {\n            background: var(--card-bg);\n            border-radius: 10px;\n            padding: 1.5rem;\n            margin-bottom: 2rem;\n            box-shadow: 0 2px 10px rgba(0,0,0,0.1);\n            min-height: 350px;\n            position: relative;\n        }\n\n        .chart-container canvas {\n            max-height: 300px !important;\n            height: 300px !important;\n        }\n\n        .table-container {\n            background: var(--card-bg);\n            border-radius: 10px;\n            padding: 1.5rem;\n            box-shadow: 0 2px 10px rgba(0,0,0,0.1);\n        }\n\n        .search-box {\n            margin-bottom: 1rem;\n            padding: 0.75rem;\n            border: 2px solid var(--border-color);\n            border-radius: 8px;\n            font-size: 1rem;\n            width: 100%;\n        }\n\n        .search-box:focus {\n            outline: none;\n            border-color: var(--primary-color);\n        }\n\n        .table {\n            margin-bottom: 0;\n        }\n\n        .table th {\n            background-color: var(--primary-color);\n            color: white;\n            border: none;\n            font-weight: 600;\n            cursor: pointer;\n            transition: background-color 0.2s ease;\n        }\n\n        .table th:hover {\n            background-color: #1d4ed8;\n        }\n\n        .table td {\n            border-color: var(--border-color);\n            vertical-align: middle;\n        }\n\n        .table tbody tr:hover {\n            background-color: #f8fafc;\n        }\n\n        .badge {\n            font-size: 0.8rem;\n            padding: 0.4rem 0.8rem;\n        }\n\n        .section-title {\n            color: var(--text-color);\n            margin-bottom: 1.5rem;\n            font-weight: 600;\n            border-bottom: 2px solid var(--primary-color);\n            padding-bottom: 0.5rem;\n        }\n\n        @media print {\n            body { background: white; }\n            .header-section { background: var(--primary-color) !important; }\n            .stat-card, .chart-container, .table-container { \n                box-shadow: none; \n                border: 1px solid var(--border-color); \n            }\n            .no-print { display: none !important; }\n        }\n\n        @media (max-width: 768px) {\n            .stat-card {\n                margin-bottom: 1rem;\n            }\n            .chart-container {\n                padding: 1rem;\n                min-height: 250px;\n            }\n            .chart-container canvas {\n                max-height: 200px !important;\n                height: 200px !important;\n            }\n            .table-container {\n                padding: 1rem;\n                overflow-x: auto;\n            }\n            .section-title {\n                font-size: 1.1rem;\n            }\n            .stat-number {\n                font-size: 1.5rem;\n            }\n        }\n\n        @media (max-width: 480px) {\n            .header-section {\n                padding: 1rem 0;\n            }\n            .header-section h1 {\n                font-size: 1.8rem;\n            }\n            .stat-card {\n                padding: 1rem;\n            }\n            .chart-container {\n                padding: 0.5rem;\n                min-height: 200px;\n            }\n            .chart-container canvas {\n                max-height: 150px !important;\n                height: 150px !important;\n            }\n        }\n    </style>\n</head>\n<body>\n    <div class=\"header-section\">\n        <div class=\"container\">\n            <div class=\"row\">\n                <div class=\"col-12\">\n                    <h1 class=\"mb-3\">💳 Payment Report</h1>\n                    <p class=\"mb-0\">Generated on ${new Date().toLocaleDateString('en-US', { \n                        weekday: 'long', \n                        year: 'numeric', \n                        month: 'long', \n                        day: 'numeric' \n                    })}</p>\n                </div>\n            </div>\n        </div>\n    </div>\n\n    <div class=\"container\">\n        <!-- Statistics Cards -->\n        <div class=\"row mb-4\">\n            <div class=\"col-md-3 col-sm-6\">\n                <div class=\"stat-card\">\n                    <div class=\"stat-number\">${formatCurrency(stats.totalAmount)}</div>\n                    <div class=\"stat-label\">Total Spent</div>\n                </div>\n            </div>\n            <div class=\"col-md-3 col-sm-6\">\n                <div class=\"stat-card\">\n                    <div class=\"stat-number\">${stats.transactionCount}</div>\n                    <div class=\"stat-label\">Transactions</div>\n                </div>\n            </div>\n            <div class=\"col-md-3 col-sm-6\">\n                <div class=\"stat-card\">\n                    <div class=\"stat-number\">${formatCurrency(stats.averageAmount)}</div>\n                    <div class=\"stat-label\">Average Amount</div>\n                </div>\n            </div>\n            <div class=\"col-md-3 col-sm-6\">\n                <div class=\"stat-card\">\n                    <div class=\"stat-number\">${stats.dateRange.start.toLocaleDateString()} - ${stats.dateRange.end.toLocaleDateString()}</div>\n                    <div class=\"stat-label\">Date Range</div>\n                </div>\n            </div>\n        </div>\n\n        <!-- Top Merchant Card -->\n        <div class=\"row mb-4\">\n            <div class=\"col-12\">\n                <div class=\"stat-card\">\n                    <h5 class=\"mb-2\">🏆 Top Merchant</h5>\n                    <div class=\"stat-number\">${topMerchantName}</div>\n                    <div class=\"stat-label\">${formatCurrency(topMerchantAmount)}</div>\n                </div>\n            </div>\n        </div>\n\n        <!-- Charts -->\n        <div class=\"row mb-4\">\n            <div class=\"col-md-6\">\n                <div class=\"chart-container\">\n                    <h5 class=\"section-title\">📈 Monthly Spending Trend</h5>\n                    <canvas id=\"monthlyChart\"></canvas>\n                </div>\n            </div>\n            <div class=\"col-md-6\">\n                <div class=\"chart-container\">\n                    <h5 class=\"section-title\">🏪 Top Merchants</h5>\n                    <canvas id=\"merchantChart\"></canvas>\n                </div>\n            </div>\n        </div>\n\n        <!-- Transaction Table -->\n        <div class=\"table-container\">\n            <h5 class=\"section-title\">📋 Transaction Details</h5>\n            <input type=\"text\" class=\"search-box\" id=\"searchInput\" placeholder=\"Search transactions...\">\n            <div class=\"table-responsive\">\n                <table class=\"table table-striped\" id=\"transactionTable\">\n                    <thead>\n                        <tr>\n                            <th onclick=\"sortTable(0)\">Date</th>\n                            <th onclick=\"sortTable(1)\">Merchant</th>\n                            <th onclick=\"sortTable(2)\">Amount</th>\n                            <th onclick=\"sortTable(3)\">Currency</th>\n                            <th onclick=\"sortTable(4)\">Type</th>\n                        </tr>\n                    </thead>\n                    <tbody>\n                        ${processedData.map(payment => `\n                            <tr>\n                                <td>${payment.formattedDate}</td>\n                                <td>${payment.Merchant}</td>\n                                <td>${payment.formattedAmount}</td>\n                                <td><span class=\"badge bg-secondary\">${payment.Currency}</span></td>\n                                <td><span class=\"badge bg-primary\">${payment.Type}</span></td>\n                            </tr>\n                        `).join('')}\n                    </tbody>\n                </table>\n            </div>\n        </div>\n    </div>\n\n    <script>\n        // Chart.js Configuration\n        const chartColors = {\n            primary: '#2563eb',\n            secondary: '#10b981',\n            accent: '#f59e0b',\n            gradient: ['#2563eb', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6']\n        };\n\n        // Wait for DOM to be fully loaded\n        document.addEventListener('DOMContentLoaded', function() {\n            // Initialize charts with error handling\n            initializeCharts();\n            initializeTableFunctionality();\n        });\n\n        function initializeCharts() {\n            try {\n                // Monthly Spending Chart\n                const monthlyCanvas = document.getElementById('monthlyChart');\n                if (monthlyCanvas) {\n                    const monthlyCtx = monthlyCanvas.getContext('2d');\n                    const monthlyChart = new Chart(monthlyCtx, {\n                        type: 'line',\n                        data: {\n                            labels: ${JSON.stringify(Object.keys(monthlyData))},\n                            datasets: [{\n                                label: 'Monthly Spending',\n                                data: ${JSON.stringify(Object.values(monthlyData))},\n                                borderColor: chartColors.primary,\n                                backgroundColor: chartColors.primary + '20',\n                                tension: 0.4,\n                                fill: true\n                            }]\n                        },\n                        options: {\n                            responsive: true,\n                            maintainAspectRatio: false,\n                            plugins: {\n                                legend: {\n                                    display: false\n                                }\n                            },\n                            scales: {\n                                y: {\n                                    beginAtZero: true,\n                                    ticks: {\n                                        callback: function(value) {\n                                            return '€' + value.toFixed(2);\n                                        }\n                                    }\n                                }\n                            }\n                        }\n                    });\n                }\n\n                // Top Merchants Chart\n                const merchantCanvas = document.getElementById('merchantChart');\n                if (merchantCanvas) {\n                    const merchantCtx = merchantCanvas.getContext('2d');\n                    const merchantChart = new Chart(merchantCtx, {\n                        type: 'bar',\n                        data: {\n                            labels: ${JSON.stringify(topMerchants.map(([name]) => name.length > 20 ? name.substring(0, 20) + '...' : name))},\n                            datasets: [{\n                                label: 'Amount Spent',\n                                data: ${JSON.stringify(topMerchants.map(([, amount]) => amount))},\n                                backgroundColor: chartColors.gradient.slice(0, ${topMerchants.length}),\n                                borderColor: chartColors.gradient.slice(0, ${topMerchants.length}),\n                                borderWidth: 1\n                            }]\n                        },\n                        options: {\n                            responsive: true,\n                            maintainAspectRatio: false,\n                            plugins: {\n                                legend: {\n                                    display: false\n                                }\n                            },\n                            scales: {\n                                y: {\n                                    beginAtZero: true,\n                                    ticks: {\n                                        callback: function(value) {\n                                            return '€' + value.toFixed(2);\n                                        }\n                                    }\n                                }\n                            }\n                        }\n                    });\n                }\n\n            } catch (error) {\n                console.error('Error initializing charts:', error);\n                // Show fallback message if charts fail\n                const chartContainers = document.querySelectorAll('.chart-container canvas');\n                chartContainers.forEach(canvas => {\n                    const container = canvas.parentElement;\n                    container.innerHTML = '<div class=\"alert alert-warning\">Chart could not be loaded. Please refresh the page.</div>';\n                });\n            }\n        }\n\n        function initializeTableFunctionality() {\n            try {\n                // Table Search Functionality with debouncing\n                const searchInput = document.getElementById('searchInput');\n                if (searchInput) {\n                    let searchTimeout;\n                    searchInput.addEventListener('keyup', function() {\n                        clearTimeout(searchTimeout);\n                        searchTimeout = setTimeout(() => {\n                            const searchTerm = this.value.toLowerCase();\n                            const table = document.getElementById('transactionTable');\n                            if (table) {\n                                const rows = table.getElementsByTagName('tr');\n\n                                for (let i = 1; i < rows.length; i++) {\n                                    const row = rows[i];\n                                    const cells = row.getElementsByTagName('td');\n                                    let found = false;\n\n                                    for (let j = 0; j < cells.length; j++) {\n                                        if (cells[j].textContent.toLowerCase().includes(searchTerm)) {\n                                            found = true;\n                                            break;\n                                        }\n                                    }\n\n                                    row.style.display = found ? '' : 'none';\n                                }\n                            }\n                        }, 150); // 150ms debounce delay\n                    });\n                }\n\n                // Set chart heights for responsiveness\n                const monthlyChart = document.getElementById('monthlyChart');\n                const merchantChart = document.getElementById('merchantChart');\n                \n                if (monthlyChart) monthlyChart.style.height = '300px';\n                if (merchantChart) merchantChart.style.height = '300px';\n\n            } catch (error) {\n                console.error('Error initializing table functionality:', error);\n            }\n        }\n\n        // Table Sorting Functionality\n        function sortTable(columnIndex) {\n            try {\n                const table = document.getElementById('transactionTable');\n                if (!table) return;\n                \n                const tbody = table.getElementsByTagName('tbody')[0];\n                if (!tbody) return;\n                \n                const rows = Array.from(tbody.getElementsByTagName('tr'));\n                \n                rows.sort((a, b) => {\n                    const aValue = a.getElementsByTagName('td')[columnIndex].textContent;\n                    const bValue = b.getElementsByTagName('td')[columnIndex].textContent;\n                    \n                    if (columnIndex === 0) {\n                        return new Date(aValue) - new Date(bValue);\n                    } else if (columnIndex === 2) {\n                        return parseFloat(aValue.replace(/[€$£,]/g, '')) - parseFloat(bValue.replace(/[€$£,]/g, ''));\n                    } else {\n                        return aValue.localeCompare(bValue);\n                    }\n                });\n\n                rows.forEach(row => tbody.appendChild(row));\n            } catch (error) {\n                console.error('Error sorting table:', error);\n            }\n        }\n    </script>\n</body>\n</html>`;\n\n    return html;\n\n  } catch (error) {\n    console.error('Error generating payment report:', error);\n    return `\n    <html>\n    <head><title>Error</title></head>\n    <body>\n        <h1>Error Generating Report</h1>\n        <p>Error: ${error.message}</p>\n        <p>Please check your input data and try again.</p>\n        <details>\n            <summary>Debug Info</summary>\n            <pre>${JSON.stringify(paymentData, null, 2)}</pre>\n        </details>\n    </body>\n    </html>`;\n  }\n}\n\n// Export for n8n (if running in Node.js environment)\nif (typeof module !== 'undefined' && module.exports) {\n  module.exports = generatePaymentReport;\n}\n\n// Main execution for n8n\nconst paymentData = $input.all(); // Get all input data from previous node\n\ntry {\n  // Generate HTML report\n  const htmlReport = generatePaymentReport(paymentData);\n  \n  // Return the HTML string\n  return {\n    json: {\n      html: htmlReport,\n      filename: `payment-report-${new Date().toISOString().split('T')[0]}.html`,\n      contentType: 'text/html',\n      generatedAt: new Date().toISOString()\n    }\n  };\n} catch (error) {\n  // Handle errors gracefully\n  return {\n    json: {\n      error: error.message,\n      timestamp: new Date().toISOString(),\n      inputData: JSON.stringify(paymentData, null, 2)\n    }\n  };\n}"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        380,
+        0
+      ],
+      "id": "a2e70288-e82f-42cb-b9b3-363a8fb56be4",
+      "name": "Report Creation",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "triggerAtDay": [
+                1
+              ],
+              "triggerAtHour": 5
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        60,
+        0
+      ],
+      "id": "119cc43f-75b0-4755-b76c-4c3ce2e3ef8d",
+      "name": "Weekly"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Get rows": {
+      "main": [
+        [
+          {
+            "node": "Report Creation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a message": {
+      "main": [
+        []
+      ]
+    },
+    "Report Creation": {
+      "main": [
+        [
+          {
+            "node": "HTML File Generation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTML File Generation": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Upload file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Weekly": {
+      "main": [
+        [
+          {
+            "node": "Get rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "SAMPLE_VERSION_ID",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "SAMPLE_INSTANCE_ID"
+  },
+  "id": "SAMPLE_WORKFLOW_ID",
+  "tags": []
+}
